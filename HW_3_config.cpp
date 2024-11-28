@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <variant>
 #include <regex>
+#include <stack>
 
 
 using std::cin, std::cout, std::endl;
@@ -23,6 +24,9 @@ struct Value {
     Value(const std::string& val) : data(val) {}
     Value(const std::vector<std::shared_ptr<Value>>& val) : data(val) {}
     Value(const std::unordered_map<std::string, std::shared_ptr<Value>>& val) : data(val) {}
+
+    Value() = default;
+    Value(const Value& value) : data(value.data) {}
 
     // Функция для вывода содержимого
     void print() const {
@@ -72,6 +76,7 @@ std::string GetLine() {
     return str.substr(start, end - start + 1);
 }
 
+
 std::vector<std::string> parseArray(const std::string& input) {
     std::vector<std::string> result;
 
@@ -103,7 +108,15 @@ std::vector<std::string> parseArray(const std::string& input) {
             // Убираем пробелы в начале и в конце
             element.erase(0, element.find_first_not_of(" \t"));
             element.erase(element.find_last_not_of(" \t") + 1);
-            result.push_back(element);
+
+            // Если элемент начинается с "!{" и заканчивается на "}", это специальный элемент
+            if (element.size() > 2 && element.front() == '!' && element[1] == '{' && element.back() == '}') {
+                result.push_back(element); // Добавляем элемент как есть
+            }
+            else {
+                result.push_back(element); // Добавляем как обычный элемент
+            }
+
             start = i + 1;  // Новый старт после запятой
         }
     }
@@ -112,16 +125,57 @@ std::vector<std::string> parseArray(const std::string& input) {
     std::string lastElement = trimmedInput.substr(start);
     lastElement.erase(0, lastElement.find_first_not_of(" \t")); // Убираем пробелы слева
     lastElement.erase(lastElement.find_last_not_of(" \t") + 1); // Убираем пробелы справа
-    result.push_back(lastElement);
+
+    // Если последний элемент начинается с "!{" и заканчивается на "}", это специальный элемент
+    if (lastElement.size() > 2 && lastElement.front() == '!' && lastElement[1] == '{' && lastElement.back() == '}') {
+        result.push_back(lastElement); // Добавляем элемент как есть
+    }
+    else {
+        result.push_back(lastElement); // Добавляем как обычный элемент
+    }
+
+    for (const auto& i : result) {
+        cout << i << endl;
+    }
 
     return result;
 }
 
 
+std::vector<std::pair<std::string, std::string>> parseTable(const std::string& input) {
+    std::vector<std::pair<std::string, std::string>> result;
+
+    // Для поиска ключей и значений, включая строки, числа и вложенные структуры
+    std::regex pattern(R"((\w+)\s*=>\s*(('[^']*')|(\d+)|(\[[^\[\]]*\])|(\!\{[a-zA-Z_]+\})|(table\([^\)]*\))))");
+    std::smatch match;
+
+    std::string::const_iterator searchStart(input.cbegin());
+
+    while (regex_search(searchStart, input.cend(), match, pattern)) {
+        std::string key = match[1];   // ключ
+        std::string value = match[2];  // значение
+
+        // Сохраняем пару ключ-значение
+        result.push_back({ key, value });
+
+        // Продолжаем с позиции после текущего совпадения
+        searchStart = match.suffix().first;
+    }
+
+    for (const auto& i : result)
+        cout << i.first << " : " << i.second << endl;
+
+    return result;
+}
+
+std::unordered_map<std::string, Value> variables;
+
 Value parseVariable(std::string& element) {
     std::regex string_re("'[^']*'");
     std::regex int_re("^[+-]?\\d+$");
     std::regex arr_re(R"(\[[^\[\]]*(?:\[(?:[^\[\]]*(?:\[[^\[\]]*\])?[^\[\]]*)*\])?[^\[\]]*\])");
+    std::regex table_re(R"(table\(([^()]*|table\([^\)]*\))+\))");
+    std::regex var_re(R"((\!\{[a-zA-Z_]+\}))");
 
     if (regex_match(element, string_re)) {
         return Value(element.substr(1, element.length() - 2));
@@ -140,14 +194,41 @@ Value parseVariable(std::string& element) {
         return Value(result);
     }
     //TODO Распарсить словарь
+
+    else if (regex_match(element, table_re)) {
+        std::unordered_map<std::string, std::shared_ptr<Value>> result;
+        std::vector<std::pair<std::string, std::string>> pairs = parseTable(element);
+        for (auto& i : pairs) {
+            result.emplace(i.first, std::make_shared<Value>(parseVariable(i.second)));
+        }
+        return Value(result);
+    }
+
+    else if (regex_match(element, var_re)) {
+        std::string name = element.substr(2, element.length() - 3);
+        return variables[name];
+    }
+
+    else {
+        std::cerr << "Syntax error: invalid value" << endl;
+        return 1;
+    }
 }
 
 int main()
 {
-    std::unordered_map<std::string, Value> variables;
+    
+
     while (true) {
         //Строку пользовательского ввода
         std::string line(GetLine());
+
+        if (line.find('\\') != std::string::npos) {
+            line = line.substr(0, line.find('\\'));
+        }
+
+        if (line == "" || line == "\n")
+            break;
 
         // Создаем регулярное выражение для разделения на лексемы
         std::regex re(R"(table\(([^()]*|table\([^\)]*\))+\)|\[[^\[\]]*(?:\[(?:[^\[\]]*(?:\[[^\[\]]*\])?[^\[\]]*)*\])?[^\[\]]*\]|'[^']*'|\S+)");  
@@ -155,18 +236,16 @@ int main()
         std::sregex_token_iterator end;
 
         std::vector<std::string> words(it, end);
-
-        for (const auto& i : words) {
-            cout << i << "\n";
+/*
+        if (words.empty()) {
+            std::cerr << "Syntax error: invalid value" << endl;
+            return 1;
         }
+*/
+        for (const auto& i : words)
+            cout << i << "\n";
 
-        if (line == "")
-            break;
-
-        if (line.front() == '/')
-            continue;
-
-        else if (words.front() == "def" && words.size() == 4) {
+        if (words.front() == "def" && words.size() == 4 && words[2] == ":=") {
             
             if (!std::regex_match(words[1], (std::regex)"[_a-zA-Z]+")) {
                 std::cerr << "Incorrect variable name";
@@ -177,35 +256,9 @@ int main()
             std::string variable = words[1];
 
             variables.emplace(variable, parseVariable(value));
-            /*
-            std::regex string_re("'[^']*'");
-            std::regex int_re("^[+-]?\\d+$");
-            std::regex arr_re(R"(\[[^\[\]]*(?:\[(?:[^\[\]]*(?:\[[^\[\]]*\])?[^\[\]]*)*\])?[^\[\]]*\])");
-
-            if (regex_match(value, string_re)) {
-                variables.emplace( variable, value.substr(1, value.length() - 2));
-            }
-
-            else if (regex_match(value, int_re)) {
-                variables.emplace(variable, std::stoi(value));
-            }
-
-            else if (regex_match(value, arr_re)) {
-                
-                std::vector<std::string> elements = parseArray(value);
-
-                for (const auto& i : elements) {
-                    cout << i << endl;
-                }
-
-            }
-            else if (regex_match(value, (std::regex)"\[[^\]]*\]")) {
-                std::vector<std::shared_ptr<Value>> arr;
-
-                variables.emplace( variable, std::make_shared<Value>())
-            */
-        }   
+        }
     }
+
 
     for (const auto& pair : variables) {
         cout << "Key: " << pair.first << " Value: "; 
