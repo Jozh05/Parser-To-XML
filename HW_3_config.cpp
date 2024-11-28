@@ -215,6 +215,7 @@ Value parseVariable(std::string& element) {
     }
 }
 
+
 int main()
 {
     
@@ -231,22 +232,17 @@ int main()
             break;
 
         // Создаем регулярное выражение для разделения на лексемы
-        std::regex re(R"(table\(([^()]*|table\([^\)]*\))+\)|\[[^\[\]]*(?:\[(?:[^\[\]]*(?:\[[^\[\]]*\])?[^\[\]]*)*\])?[^\[\]]*\]|'[^']*'|\S+)");  
-        std::sregex_token_iterator it(line.begin(), line.end(), re); 
+        std::regex re(R"(table\(([^()]*|table\([^\)]*\))+\)|\[[^\[\]]*(?:\[(?:[^\[\]]*(?:\[[^\[\]]*\])?[^\[\]]*)*\])?[^\[\]]*\]|'[^']*'|\S+)");
+        std::sregex_token_iterator it(line.begin(), line.end(), re);
         std::sregex_token_iterator end;
 
         std::vector<std::string> words(it, end);
-/*
-        if (words.empty()) {
-            std::cerr << "Syntax error: invalid value" << endl;
-            return 1;
-        }
-*/
+
         for (const auto& i : words)
             cout << i << "\n";
 
         if (words.front() == "def" && words.size() == 4 && words[2] == ":=") {
-            
+
             if (!std::regex_match(words[1], (std::regex)"[_a-zA-Z]+")) {
                 std::cerr << "Incorrect variable name";
                 return -1;
@@ -256,6 +252,10 @@ int main()
             std::string variable = words[1];
 
             variables.emplace(variable, parseVariable(value));
+        }
+        else {
+            std::cerr << "Incorrect input";
+            return -1;
         }
     }
 
