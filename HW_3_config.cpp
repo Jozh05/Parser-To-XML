@@ -9,6 +9,8 @@
 #include <regex>
 #include <stack>
 
+#include<tinyxml2.h>
+
 
 using std::cin, std::cout, std::endl;
 
@@ -53,6 +55,36 @@ struct Value {
                     std::cout << " ";
                 }
                 std::cout << "}";
+            }
+            }, data);
+    }
+
+    // Рекурсивная функция для генерации XML с использованием TinyXML2
+    void toXml(tinyxml2::XMLElement* parentElement, tinyxml2::XMLDocument& doc) const {
+        std::visit([&doc, &parentElement](const auto& val) {
+            if constexpr (std::is_same_v<std::decay_t<decltype(val)>, int>) {
+                // Если значение int, добавляем его как текст в тег с именем переменной
+                parentElement->SetText(val);
+            }
+            else if constexpr (std::is_same_v<std::decay_t<decltype(val)>, std::string>) {
+                // Если значение string, добавляем его как текст в тег с именем переменной
+                parentElement->SetText(val.c_str());
+            }
+            else if constexpr (std::is_same_v<std::decay_t<decltype(val)>, std::vector<std::shared_ptr<Value>>>) {
+                // Если значение — массив, добавляем элементы как дочерние элементы
+                for (size_t i = 0; i < val.size(); ++i) {
+                    tinyxml2::XMLElement* itemElement = doc.NewElement("item");
+                    parentElement->InsertEndChild(itemElement);
+                    val[i]->toXml(itemElement, doc); // Рекурсивно обрабатываем каждый элемент массива
+                }
+            }
+            else if constexpr (std::is_same_v<std::decay_t<decltype(val)>, std::unordered_map<std::string, std::shared_ptr<Value>>>) {
+                // Если значение — словарь, добавляем пары ключ-значение как дочерние элементы
+                for (const auto& [key, v] : val) {
+                    tinyxml2::XMLElement* keyElement = doc.NewElement(key.c_str());
+                    parentElement->InsertEndChild(keyElement);
+                    v->toXml(keyElement, doc); // Рекурсивно обрабатываем значение
+                }
             }
             }, data);
     }
@@ -134,10 +166,6 @@ std::vector<std::string> parseArray(const std::string& input) {
         result.push_back(lastElement); // Добавляем как обычный элемент
     }
 
-    for (const auto& i : result) {
-        cout << i << endl;
-    }
-
     return result;
 }
 
@@ -161,9 +189,6 @@ std::vector<std::pair<std::string, std::string>> parseTable(const std::string& i
         // Продолжаем с позиции после текущего совпадения
         searchStart = match.suffix().first;
     }
-
-    for (const auto& i : result)
-        cout << i.first << " : " << i.second << endl;
 
     return result;
 }
@@ -216,6 +241,8 @@ Value parseVariable(std::string& element) {
 }
 
 
+
+
 int main()
 {
     
@@ -237,9 +264,6 @@ int main()
         std::sregex_token_iterator end;
 
         std::vector<std::string> words(it, end);
-
-        for (const auto& i : words)
-            cout << i << "\n";
 
         if (words.front() == "def" && words.size() == 4 && words[2] == ":=") {
 
@@ -265,6 +289,18 @@ int main()
         pair.second.print();
         cout << endl;
     }
+
+    tinyxml2::XMLDocument doc;
+    tinyxml2::XMLElement* rootElement = doc.NewElement("person");
+    doc.InsertEndChild(rootElement);
+
+    for (const auto& [varName, value] : variables) {
+        tinyxml2::XMLElement* element = doc.NewElement(varName.c_str());
+        rootElement->InsertEndChild(element);
+        value.toXml(element, doc);
+    }
+
+    doc.SaveFile("output.xml");
 
 }
 
