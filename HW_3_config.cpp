@@ -5,8 +5,13 @@
 #include "Functions.h"
 
 
-int main()
+int main(int argc, char* argv[])
 {
+
+    if (argc != 2) {
+        std::cerr << "Using: HW_3_config <path to xml file>";
+        return 1;
+    }
     while (true) {
         //Строку пользовательского ввода
         std::string line(GetLine());
@@ -62,7 +67,7 @@ int main()
         value.toXml(element, doc);
     }
 
-    doc.SaveFile("output.xml");
+    doc.SaveFile(argv[1]);
 
 }
 

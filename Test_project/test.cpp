@@ -3,11 +3,6 @@
 #include <sstream>
 #include <string>
 
-TEST(TestCaseName, TestName) {
-  EXPECT_EQ(1, 1);
-  EXPECT_TRUE(true);
-}
-
 namespace function_tests {
 
 	TEST(test_function_parseArray, filled_array) {

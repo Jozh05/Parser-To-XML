@@ -38,10 +38,16 @@ std::vector<std::string> parseArray(const std::string& input) {
     size_t start = 0;
     size_t length = trimmedInput.length();
     int braceCount = 0;  // Для отслеживания вложенности скобок
+    bool insideQuote = false;  // Для отслеживания, находимся ли мы внутри кавычек
 
-    // Разбиваем строку по запятым, игнорируя запятые внутри вложенных структур
+    // Разбиваем строку по запятым, игнорируя запятые внутри вложенных структур и строк
     for (size_t i = 0; i < length; ++i) {
         char ch = trimmedInput[i];
+
+        // Если встречаем одиночную кавычку, меняем состояние (внутри кавычек или нет)
+        if (ch == '\'' && (i == 0 || trimmedInput[i - 1] != '\\')) {
+            insideQuote = !insideQuote;
+        }
 
         // Увеличиваем/уменьшаем уровень вложенности при встрече скобок
         if (ch == '[' || ch == '(') {
@@ -51,21 +57,15 @@ std::vector<std::string> parseArray(const std::string& input) {
             --braceCount;
         }
 
-        // Если текущий символ - запятая и нет вложенных скобок, то это разделитель
-        if (ch == ',' && braceCount == 0) {
+        // Если текущий символ - запятая и мы не внутри кавычек и на уровне верхней вложенности
+        if (ch == ',' && !insideQuote && braceCount == 0) {
             std::string element = trimmedInput.substr(start, i - start);
             // Убираем пробелы в начале и в конце
             element.erase(0, element.find_first_not_of(" \t"));
             element.erase(element.find_last_not_of(" \t") + 1);
 
-            // Если элемент начинается с "!{" и заканчивается на "}", это специальный элемент
-            if (element.size() > 2 && element.front() == '!' && element[1] == '{' && element.back() == '}') {
-                result.push_back(element); // Добавляем элемент как есть
-            }
-            else {
-                result.push_back(element); // Добавляем как обычный элемент
-            }
-
+            // Добавляем элемент в результат
+            result.push_back(element);
             start = i + 1;  // Новый старт после запятой
         }
     }
@@ -75,19 +75,19 @@ std::vector<std::string> parseArray(const std::string& input) {
     lastElement.erase(0, lastElement.find_first_not_of(" \t")); // Убираем пробелы слева
     lastElement.erase(lastElement.find_last_not_of(" \t") + 1); // Убираем пробелы справа
 
-    // Если последний элемент начинается с "!{" и заканчивается на "}", это специальный элемент
-    if (lastElement.size() > 2 && lastElement.front() == '!' && lastElement[1] == '{' && lastElement.back() == '}') {
-        result.push_back(lastElement); // Добавляем элемент как есть
-    }
-    else {
-        result.push_back(lastElement); // Добавляем как обычный элемент
-    }
+    result.push_back(lastElement); // Добавляем последний элемент
 
     return result;
 }
 
 
 std::vector<std::pair<std::string, std::string>> parseTable(const std::string& input) {
+    
+    if (!regex_match(input, (std::regex)R"(table\(([^()]*|table\([^\)]*\))+\))")) {
+        std::cerr << "Syntax error. Invalid value";
+        exit(-5);
+    }
+    
     std::vector<std::pair<std::string, std::string>> result;
 
     // Для поиска ключей и значений, включая строки, числа и вложенные структуры
