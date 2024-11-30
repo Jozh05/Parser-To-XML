@@ -1,252 +1,12 @@
 ﻿// HW_3_config.cpp : Этот файл содержит функцию "main". Здесь начинается и заканчивается выполнение программы.
 //
 
-#include <iostream>
-#include <string>
-#include <vector>
-#include <unordered_map>
-#include <variant>
-#include <regex>
-#include <stack>
-
-#include<tinyxml2.h>
-
-
-using std::cin, std::cout, std::endl;
-
-// Структура для хранения разных типов данных
-struct Value {
-    // Используем variant для хранения различных типов
-    using VariantType = std::variant<int, std::string, std::vector<std::shared_ptr<Value>>, std::unordered_map<std::string, std::shared_ptr<Value>>>;
-
-    VariantType data;
-
-    // Конструкторы для разных типов данных
-    Value(int val) : data(val) {}
-    Value(const std::string& val) : data(val) {}
-    Value(const std::vector<std::shared_ptr<Value>>& val) : data(val) {}
-    Value(const std::unordered_map<std::string, std::shared_ptr<Value>>& val) : data(val) {}
-
-    Value() = default;
-    Value(const Value& value) : data(value.data) {}
-
-    // Функция для вывода содержимого
-    void print() const {
-        std::visit([](const auto& val) {
-            if constexpr (std::is_same_v<std::decay_t<decltype(val)>, int>) {
-                std::cout << val << "(int)";
-            }
-            else if constexpr (std::is_same_v<std::decay_t<decltype(val)>, std::string>) {
-                std::cout << val << "(string)";
-            }
-            else if constexpr (std::is_same_v<std::decay_t<decltype(val)>, std::vector<std::shared_ptr<Value>>>) {
-                std::cout << "[ ";
-                for (const auto& v : val) {
-                    v->print();
-                    std::cout << " ";
-                }
-                std::cout << "](array)";
-            }
-            else if constexpr (std::is_same_v<std::decay_t<decltype(val)>, std::unordered_map<std::string, std::shared_ptr<Value>>>) {
-                std::cout << "{ ";
-                for (const auto& [key, v] : val) {
-                    std::cout << key << ": ";
-                    v->print();
-                    std::cout << " ";
-                }
-                std::cout << "}";
-            }
-            }, data);
-    }
-
-    // Рекурсивная функция для генерации XML с использованием TinyXML2
-    void toXml(tinyxml2::XMLElement* parentElement, tinyxml2::XMLDocument& doc) const {
-        std::visit([&doc, &parentElement](const auto& val) {
-            if constexpr (std::is_same_v<std::decay_t<decltype(val)>, int>) {
-                // Если значение int, добавляем его как текст в тег с именем переменной
-                parentElement->SetText(val);
-            }
-            else if constexpr (std::is_same_v<std::decay_t<decltype(val)>, std::string>) {
-                // Если значение string, добавляем его как текст в тег с именем переменной
-                parentElement->SetText(val.c_str());
-            }
-            else if constexpr (std::is_same_v<std::decay_t<decltype(val)>, std::vector<std::shared_ptr<Value>>>) {
-                // Если значение — массив, добавляем элементы как дочерние элементы
-                for (size_t i = 0; i < val.size(); ++i) {
-                    tinyxml2::XMLElement* itemElement = doc.NewElement("item");
-                    parentElement->InsertEndChild(itemElement);
-                    val[i]->toXml(itemElement, doc); // Рекурсивно обрабатываем каждый элемент массива
-                }
-            }
-            else if constexpr (std::is_same_v<std::decay_t<decltype(val)>, std::unordered_map<std::string, std::shared_ptr<Value>>>) {
-                // Если значение — словарь, добавляем пары ключ-значение как дочерние элементы
-                for (const auto& [key, v] : val) {
-                    tinyxml2::XMLElement* keyElement = doc.NewElement(key.c_str());
-                    parentElement->InsertEndChild(keyElement);
-                    v->toXml(keyElement, doc); // Рекурсивно обрабатываем значение
-                }
-            }
-            }, data);
-    }
-};
-
-// Функция для обрезки пробелов с начала и конца строки
-std::string GetLine() {
-
-    std::string str;
-    std::getline(cin, str);
-
-    // Находим первый не-пробельный символ
-    size_t start = str.find_first_not_of(" \t\r\n");
-    // Если строка состоит только из пробелов, возвращаем пустую строку
-    if (start == std::string::npos) return "";
-
-    // Находим последний не-пробельный символ
-    size_t end = str.find_last_not_of(" \t\r\n");
-
-    // Возвращаем подстроку без пробелов
-    return str.substr(start, end - start + 1);
-}
-
-
-std::vector<std::string> parseArray(const std::string& input) {
-    std::vector<std::string> result;
-
-    // Убираем внешние квадратные скобки
-    std::string trimmedInput = input;
-    if (trimmedInput.front() == '[' && trimmedInput.back() == ']') {
-        trimmedInput = trimmedInput.substr(1, trimmedInput.length() - 2);
-    }
-
-    size_t start = 0;
-    size_t length = trimmedInput.length();
-    int braceCount = 0;  // Для отслеживания вложенности скобок
-
-    // Разбиваем строку по запятым, игнорируя запятые внутри вложенных структур
-    for (size_t i = 0; i < length; ++i) {
-        char ch = trimmedInput[i];
-
-        // Увеличиваем/уменьшаем уровень вложенности при встрече скобок
-        if (ch == '[' || ch == '(') {
-            ++braceCount;
-        }
-        else if (ch == ']' || ch == ')') {
-            --braceCount;
-        }
-
-        // Если текущий символ - запятая и нет вложенных скобок, то это разделитель
-        if (ch == ',' && braceCount == 0) {
-            std::string element = trimmedInput.substr(start, i - start);
-            // Убираем пробелы в начале и в конце
-            element.erase(0, element.find_first_not_of(" \t"));
-            element.erase(element.find_last_not_of(" \t") + 1);
-
-            // Если элемент начинается с "!{" и заканчивается на "}", это специальный элемент
-            if (element.size() > 2 && element.front() == '!' && element[1] == '{' && element.back() == '}') {
-                result.push_back(element); // Добавляем элемент как есть
-            }
-            else {
-                result.push_back(element); // Добавляем как обычный элемент
-            }
-
-            start = i + 1;  // Новый старт после запятой
-        }
-    }
-
-    // Обрабатываем последний элемент (после последней запятой или конца строки)
-    std::string lastElement = trimmedInput.substr(start);
-    lastElement.erase(0, lastElement.find_first_not_of(" \t")); // Убираем пробелы слева
-    lastElement.erase(lastElement.find_last_not_of(" \t") + 1); // Убираем пробелы справа
-
-    // Если последний элемент начинается с "!{" и заканчивается на "}", это специальный элемент
-    if (lastElement.size() > 2 && lastElement.front() == '!' && lastElement[1] == '{' && lastElement.back() == '}') {
-        result.push_back(lastElement); // Добавляем элемент как есть
-    }
-    else {
-        result.push_back(lastElement); // Добавляем как обычный элемент
-    }
-
-    return result;
-}
-
-
-std::vector<std::pair<std::string, std::string>> parseTable(const std::string& input) {
-    std::vector<std::pair<std::string, std::string>> result;
-
-    // Для поиска ключей и значений, включая строки, числа и вложенные структуры
-    std::regex pattern(R"((\w+)\s*=>\s*(('[^']*')|(\d+)|(\[[^\[\]]*\])|(\!\{[a-zA-Z_]+\})|(table\([^\)]*\))))");
-    std::smatch match;
-
-    std::string::const_iterator searchStart(input.cbegin());
-
-    while (regex_search(searchStart, input.cend(), match, pattern)) {
-        std::string key = match[1];   // ключ
-        std::string value = match[2];  // значение
-
-        // Сохраняем пару ключ-значение
-        result.push_back({ key, value });
-
-        // Продолжаем с позиции после текущего совпадения
-        searchStart = match.suffix().first;
-    }
-
-    return result;
-}
-
-std::unordered_map<std::string, Value> variables;
-
-Value parseVariable(std::string& element) {
-    std::regex string_re("'[^']*'");
-    std::regex int_re("^[+-]?\\d+$");
-    std::regex arr_re(R"(\[[^\[\]]*(?:\[(?:[^\[\]]*(?:\[[^\[\]]*\])?[^\[\]]*)*\])?[^\[\]]*\])");
-    std::regex table_re(R"(table\(([^()]*|table\([^\)]*\))+\))");
-    std::regex var_re(R"((\!\{[a-zA-Z_]+\}))");
-
-    if (regex_match(element, string_re)) {
-        return Value(element.substr(1, element.length() - 2));
-    }
-
-    else if (regex_match(element, int_re)) {
-        return Value(std::stoi(element));
-    }
-
-    else if (regex_match(element, arr_re)) {
-        std::vector<std::shared_ptr<Value>> result;
-        std::vector<std::string> elements = parseArray(element);
-        for (auto& el : elements) {
-            result.push_back(std::make_shared<Value>(parseVariable(el)));
-        }
-        return Value(result);
-    }
-    //TODO Распарсить словарь
-
-    else if (regex_match(element, table_re)) {
-        std::unordered_map<std::string, std::shared_ptr<Value>> result;
-        std::vector<std::pair<std::string, std::string>> pairs = parseTable(element);
-        for (auto& i : pairs) {
-            result.emplace(i.first, std::make_shared<Value>(parseVariable(i.second)));
-        }
-        return Value(result);
-    }
-
-    else if (regex_match(element, var_re)) {
-        std::string name = element.substr(2, element.length() - 3);
-        return variables[name];
-    }
-
-    else {
-        std::cerr << "Syntax error: invalid value" << endl;
-        return 1;
-    }
-}
-
-
+#include "Value.h"
+#include "Functions.h"
 
 
 int main()
 {
-    
-
     while (true) {
         //Строку пользовательского ввода
         std::string line(GetLine());
@@ -283,49 +43,28 @@ int main()
         }
     }
 
-
-    for (const auto& pair : variables) {
-        cout << "Key: " << pair.first << " Value: "; 
-        pair.second.print();
-        cout << endl;
+   for (const auto& pair : variables) {
+       pair.second.check();
+       cout << "Key: " << pair.first << " Value: "; 
+       pair.second.print();
+       cout << endl;
     }
 
     tinyxml2::XMLDocument doc;
-    tinyxml2::XMLElement* rootElement = doc.NewElement("person");
+    /*
+    tinyxml2::XMLElement* rootElement = doc.NewElement("data");
     doc.InsertEndChild(rootElement);
+    */
 
     for (const auto& [varName, value] : variables) {
         tinyxml2::XMLElement* element = doc.NewElement(varName.c_str());
-        rootElement->InsertEndChild(element);
+        doc.InsertEndChild(element);
         value.toXml(element, doc);
     }
 
     doc.SaveFile("output.xml");
 
 }
-
-
-/*// Создание вложенных словарей
-    std::unordered_map<std::string, std::shared_ptr<Value>> innerDict = {
-        {"innerKey1", std::make_shared<Value>(42)},
-        {"innerKey2", std::make_shared<Value>("Inner Value")}
-    };
-
-    // Внешний словарь с вложенным словарем
-    std::unordered_map<std::string, std::shared_ptr<Value>> outerDict = {
-        {"outerKey1", std::make_shared<Value>(100)},
-        {"outerKey2", std::make_shared<Value>("Outer Value")},
-        {"outerKey3", std::make_shared<Value>(innerDict)}  // Вложенный словарь
-    };
-
-    // Создание объекта Value с внешним словарем
-    Value dictVal(outerDict);
-
-    // Вывод значений
-    std::cout << "Dictionary with recursive structure: ";
-    dictVal.print();
-    std::cout << "\n";*/
-
 
 
 
