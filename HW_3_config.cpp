@@ -7,17 +7,20 @@
 
 int main(int argc, char* argv[])
 {
-
+    
     if (argc != 2) {
         std::cerr << "Using: HW_3_config <path to xml file>";
         return 1;
     }
+
     while (true) {
         //Строку пользовательского ввода
         std::string line(GetLine());
 
         if (line.find('\\') != std::string::npos) {
             line = line.substr(0, line.find('\\'));
+            if (line == "")
+                continue;
         }
 
         if (line == "" || line == "\n")
@@ -67,6 +70,7 @@ int main(int argc, char* argv[])
         value.toXml(element, doc);
     }
 
+//    doc.SaveFile(argv[1]);
     doc.SaveFile(argv[1]);
 
 }
